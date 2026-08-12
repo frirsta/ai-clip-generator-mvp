@@ -41,6 +41,36 @@ export default function Home() {
     }
   }
 
+  async function transcribeAudio(event) {
+    const audio = event.target.files?.[0];
+
+    if (!audio) return;
+
+    try {
+      setStatus("Transcribing...");
+
+      const formData = new FormData();
+      formData.append("audio", audio);
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Transcription failed");
+      }
+
+      console.log("TRANSCRIPTION:", result);
+      setStatus(result.text || "Transcription complete!");
+    } catch (error) {
+      console.error(error);
+      setStatus("Transcription failed.");
+    }
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
       <h1 className="text-3xl font-bold">AI Clip Generator</h1>
@@ -60,6 +90,12 @@ export default function Home() {
       </button>
 
       {status && <p>{status}</p>}
+
+      <div className="mt-8">
+        <p className="mb-2">Test transcription</p>
+
+        <input type="file" accept="audio/*" onChange={transcribeAudio} />
+      </div>
     </main>
   );
 }

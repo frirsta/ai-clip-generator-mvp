@@ -26,6 +26,9 @@
       "bucket_name": "ai-clip-videos"
     }
   ],
+  "ai": {
+  "binding": "AI"
+},
   "images": {
     "binding": "IMAGES"
   },

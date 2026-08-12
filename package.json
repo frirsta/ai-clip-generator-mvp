@@ -16,9 +16,11 @@
     "@aws-sdk/client-s3": "^3.1108.0",
     "@aws-sdk/s3-request-presigner": "^3.1108.0",
     "@opennextjs/cloudflare": "^1.20.2",
+    "ai": "^7.0.63",
     "next": "16.3.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "workers-ai-provider": "^4.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
