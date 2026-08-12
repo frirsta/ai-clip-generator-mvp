@@ -29,6 +29,9 @@
   "ai": {
   "binding": "AI"
 },
+"media": {
+  "binding": "MEDIA"
+},
   "images": {
     "binding": "IMAGES"
   },

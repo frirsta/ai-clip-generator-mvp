@@ -5,13 +5,16 @@ import { useState } from "react";
 export default function Home() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("");
+  const [transcript, setTranscript] = useState("");
 
   async function uploadVideo() {
     if (!file) return;
 
     try {
       setStatus("Preparing upload...");
+      setTranscript("");
 
+      // 1. Get a presigned R2 upload URL
       const response = await fetch("/api/upload-url");
 
       if (!response.ok) {
@@ -20,7 +23,8 @@ export default function Home() {
 
       const { uploadUrl } = await response.json();
 
-      setStatus("Uploading...");
+      // 2. Upload the video to R2
+      setStatus("Uploading video...");
 
       const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
@@ -34,40 +38,30 @@ export default function Home() {
         throw new Error("Upload failed");
       }
 
-      setStatus("Upload complete!");
-    } catch (error) {
-      console.error(error);
-      setStatus("Upload failed.");
-    }
-  }
-
-  async function transcribeAudio(event) {
-    const audio = event.target.files?.[0];
-
-    if (!audio) return;
-
-    try {
-      setStatus("Transcribing...");
+      // 3. Transcribe the same video
+      setStatus("Transcribing video...");
 
       const formData = new FormData();
-      formData.append("audio", audio);
+      formData.append("audio", file);
 
-      const response = await fetch("/api/transcribe", {
+      const transcribeResponse = await fetch("/api/transcribe", {
         method: "POST",
         body: formData,
       });
 
-      const result = await response.json();
+      const result = await transcribeResponse.json();
 
-      if (!response.ok) {
+      if (!transcribeResponse.ok) {
         throw new Error(result.error || "Transcription failed");
       }
 
-      console.log("TRANSCRIPTION:", result);
-      setStatus(result.text || "Transcription complete!");
+      console.log("VIDEO TRANSCRIPTION:", result);
+
+      setTranscript(result.text || "");
+      setStatus("Transcription complete!");
     } catch (error) {
       console.error(error);
-      setStatus("Transcription failed.");
+      setStatus(error.message || "Something went wrong.");
     }
   }
 
@@ -78,7 +72,9 @@ export default function Home() {
       <input
         type="file"
         accept="video/mp4"
-        onChange={(event) => setFile(event.target.files?.[0] || null)}
+        onChange={(event) =>
+          setFile(event.target.files?.[0] || null)
+        }
       />
 
       <button
@@ -91,11 +87,12 @@ export default function Home() {
 
       {status && <p>{status}</p>}
 
-      <div className="mt-8">
-        <p className="mb-2">Test transcription</p>
-
-        <input type="file" accept="audio/*" onChange={transcribeAudio} />
-      </div>
+      {transcript && (
+        <div className="w-full max-w-2xl rounded-lg border p-4">
+          <h2 className="mb-2 font-bold">Transcript</h2>
+          <p>{transcript}</p>
+        </div>
+      )}
     </main>
   );
 }
