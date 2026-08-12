@@ -6,6 +6,7 @@ export default function Home() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [clips, setClips] = useState([]);
 
   async function uploadVideo() {
     if (!file) return;
@@ -13,17 +14,18 @@ export default function Home() {
     try {
       setStatus("Preparing upload...");
       setTranscript("");
+      setClips([]);
 
-      // 1. Get a presigned R2 upload URL
-      const response = await fetch("/api/upload-url");
+      // 1. Get R2 upload URL
+      const uploadUrlResponse = await fetch("/api/upload-url");
 
-      if (!response.ok) {
+      if (!uploadUrlResponse.ok) {
         throw new Error("Could not create upload URL");
       }
 
-      const { uploadUrl } = await response.json();
+      const { uploadUrl } = await uploadUrlResponse.json();
 
-      // 2. Upload the video to R2
+      // 2. Upload video to R2
       setStatus("Uploading video...");
 
       const uploadResponse = await fetch(uploadUrl, {
@@ -38,7 +40,7 @@ export default function Home() {
         throw new Error("Upload failed");
       }
 
-      // 3. Transcribe the same video
+      // 3. Transcribe video
       setStatus("Transcribing video...");
 
       const formData = new FormData();
@@ -49,50 +51,122 @@ export default function Home() {
         body: formData,
       });
 
-      const result = await transcribeResponse.json();
+      const transcription = await transcribeResponse.json();
 
       if (!transcribeResponse.ok) {
-        throw new Error(result.error || "Transcription failed");
+        throw new Error(transcription.error || "Transcription failed");
       }
 
-      console.log("VIDEO TRANSCRIPTION:", result);
+      setTranscript(transcription.text || "");
 
-      setTranscript(result.text || "");
-      setStatus("Transcription complete!");
+      // 4. Analyze transcript with AI
+      setStatus("Finding the best clips...");
+
+      const analyzeResponse = await fetch("/api/analyze-transcript", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcript: transcription.text,
+          segments: transcription.segments,
+        }),
+      });
+
+      const analysis = await analyzeResponse.json();
+
+      console.log("AI ANALYSIS:", analysis);
+
+      if (!analyzeResponse.ok) {
+        throw new Error(analysis.error || "Clip analysis failed");
+      }
+
+      setClips(analysis.clips || []);
+      setStatus("Analysis complete!");
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Something went wrong.");
     }
   }
 
+  function formatTime(seconds) {
+    const totalSeconds = Math.floor(Number(seconds));
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+
+    return `${String(minutes).padStart(2, "0")}:${String(
+      remainingSeconds,
+    ).padStart(2, "0")}`;
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-bold">AI Clip Generator</h1>
+    <main className="flex min-h-screen flex-col items-center gap-8 p-8">
+      <div className="w-full max-w-3xl pt-12">
+        <h1 className="text-4xl font-bold">AI Clip Generator</h1>
 
-      <input
-        type="file"
-        accept="video/mp4"
-        onChange={(event) =>
-          setFile(event.target.files?.[0] || null)
-        }
-      />
+        <p className="mt-2 text-gray-600">
+          Upload a video and let AI find the best moments.
+        </p>
 
-      <button
-        onClick={uploadVideo}
-        disabled={!file}
-        className="rounded-lg bg-black px-6 py-3 text-white disabled:opacity-50"
-      >
-        Upload Video
-      </button>
+        <div className="mt-8 rounded-xl border p-6">
+          <input
+            type="file"
+            accept="video/mp4"
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+            className="w-full"
+          />
 
-      {status && <p>{status}</p>}
+          <button
+            onClick={uploadVideo}
+            disabled={!file}
+            className="mt-4 rounded-lg bg-black px-6 py-3 text-white disabled:opacity-50"
+          >
+            Analyze Video
+          </button>
 
-      {transcript && (
-        <div className="w-full max-w-2xl rounded-lg border p-4">
-          <h2 className="mb-2 font-bold">Transcript</h2>
-          <p>{transcript}</p>
+          {status && <p className="mt-4 text-sm text-gray-600">{status}</p>}
         </div>
-      )}
+
+        {transcript && (
+          <div className="mt-8 rounded-xl border p-6">
+            <h2 className="text-xl font-bold">Transcript</h2>
+
+            <p className="mt-3 whitespace-pre-wrap text-gray-700">
+              {transcript}
+            </p>
+          </div>
+        )}
+
+        {clips.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold">Best Clips</h2>
+
+            <div className="mt-4 space-y-4">
+              {clips.map((clip, index) => (
+                <div key={index} className="rounded-xl border p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-lg font-bold">{clip.title}</h3>
+
+                    <span className="text-sm text-gray-500">
+                      {formatTime(clip.start)} → {formatTime(clip.end)}
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-gray-600">{clip.reason}</p>
+
+                  <button
+                    disabled
+                    className="mt-4 rounded-lg bg-black px-4 py-2 text-sm text-white opacity-50"
+                  >
+                    Generate Clip
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
