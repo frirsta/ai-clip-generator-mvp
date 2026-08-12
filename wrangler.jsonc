@@ -20,6 +20,10 @@
     {
       "binding": "NEXT_INC_CACHE_R2_BUCKET",
       "bucket_name": "ai-clip-generator-mvp-opennext-cache"
+    },
+    {
+      "binding": "VIDEO_BUCKET",
+      "bucket_name": "ai-clip-videos"
     }
   ],
   "images": {
