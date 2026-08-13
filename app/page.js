@@ -99,17 +99,20 @@ export default function Home() {
       setGeneratingClip(index);
       setStatus(`Generating clip ${index + 1}...`);
 
-      const response = await fetch("/api/generate-clip", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "https://ai-clip-clip-worker.ai-clip-generator-mvp.workers.dev",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            key: videoKey,
+            start: Number(clip.start),
+            end: Number(clip.end),
+          }),
         },
-        body: JSON.stringify({
-          key: videoKey,
-          start: Number(clip.start),
-          end: Number(clip.end),
-        }),
-      });
+      );
 
       const result = await response.json();
 

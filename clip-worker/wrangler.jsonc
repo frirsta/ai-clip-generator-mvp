@@ -1,0 +1,20 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ai-clip-clip-worker",
+  "main": "index.js",
+  "compatibility_date": "2026-08-11",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "r2_buckets": [
+    {
+      "binding": "VIDEO_BUCKET",
+      "bucket_name": "ai-clip-videos",
+      "remote": true
+    }
+  ],
+  "media": {
+    "binding": "MEDIA",
+    "remote": true
+  }
+}
