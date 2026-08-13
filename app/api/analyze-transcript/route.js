@@ -2,7 +2,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export async function POST(request) {
   try {
-    const { env } = await getCloudflareContext({ async: true });
+    const { env } = getCloudflareContext();
 
     const { transcript, segments } = await request.json();
 
@@ -13,10 +13,15 @@ export async function POST(request) {
       );
     }
 
+    const videoDuration =
+      Array.isArray(segments) && segments.length
+        ? Math.max(...segments.map((segment) => Number(segment.end) || 0))
+        : 0;
+
     const timestampedTranscript = segments?.length
       ? segments
-          .map((segment) => {
-            return `[${segment.start}s - ${segment.end}s] ${segment.text}`;
+          .map((segment, index) => {
+            return `[segment ${index}] [${segment.start}s - ${segment.end}s] ${segment.text}`;
           })
           .join("\n")
       : transcript;
@@ -25,30 +30,46 @@ export async function POST(request) {
       messages: [
         {
           role: "system",
-          content: `You are an AI clip editor.
+          content: `You are an expert short-form video editor.
 
-Analyze a timestamped video transcript and identify the 3 best moments for short-form video clips.
+Your task is to identify the strongest moments in a video that could become engaging short-form clips.
 
-Look for:
-- Funny moments
-- Surprising moments
-- Strong reactions
-- Interesting statements
-- Emotional moments
-- Controversial or attention-grabbing statements
-- Moments with a clear beginning and payoff
-- Moments that would make someone want to watch the clip
+Available video duration:
+${videoDuration} seconds
 
-IMPORTANT:
-Use ONLY timestamps that appear in the provided transcript.
-Do not invent timestamps.
+Prioritize moments with:
+- A strong hook near the beginning
+- A clear setup
+- A payoff, punchline, reveal, reaction, conclusion, or emotional peak
+- Interesting, funny, surprising, dramatic, controversial, or relatable content
+- Minimal dead air or unnecessary context
+
+CLIP LENGTH:
+- Prefer clips between 15 and 45 seconds.
+- Clips may be shorter than 15 seconds when the moment has a very strong payoff.
+- Never exceed 45 seconds.
+- NEVER use an end timestamp greater than ${videoDuration}.
+- NEVER use a start timestamp greater than or equal to ${videoDuration}.
+
+TIMING RULES:
+- Use ONLY timestamps from the provided transcript.
+- Start and end must match actual segment boundaries.
+- Do NOT invent timestamps.
+- Do not cut a sentence in half when avoidable.
+- The complete clip must fit inside the video.
+
+DIVERSITY:
+- Return different moments.
+- Avoid overlapping clips whenever possible.
+- Do not return multiple clips covering essentially the same event.
 
 Return exactly 3 clip suggestions.
 
 Return ONLY valid JSON.
-Do not include any explanation, introduction, markdown, or text outside the JSON.
+Do not include markdown.
+Do not include explanations outside the JSON.
 
-The JSON must have this exact structure:
+Use exactly this structure:
 
 {
   "clips": [
@@ -56,33 +77,36 @@ The JSON must have this exact structure:
       "start": 0,
       "end": 10,
       "title": "Short engaging title",
-      "reason": "Why this moment would make a good short-form clip"
+      "reason": "Why this moment is strong",
+      "score": 9
     }
   ]
 }
 
-The start and end values must be numbers representing seconds.`,
+Score:
+1-3 = weak
+4-5 = average
+6-7 = good
+8-9 = very strong
+10 = exceptional`,
         },
         {
           role: "user",
-          content: `Find the 3 best clips from this timestamped transcript:
+          content: `Analyze this timestamped transcript and select the 3 strongest short-form clips:
 
 ${timestampedTranscript}`,
         },
       ],
-      max_tokens: 1000,
-      temperature: 0.3,
+      max_tokens: 1200,
+      temperature: 0.2,
     });
 
     let analysis = response.response;
 
-    // If the AI returned a JSON string, parse it.
     if (typeof analysis === "string") {
       try {
         analysis = JSON.parse(analysis);
       } catch {
-        // The model sometimes adds text before the JSON.
-        // Try extracting the JSON object.
         const firstBrace = analysis.indexOf("{");
         const lastBrace = analysis.lastIndexOf("}");
 
@@ -103,8 +127,6 @@ ${timestampedTranscript}`,
             );
           }
         } else {
-          console.error("Could not find JSON in AI response:", analysis);
-
           return Response.json(
             {
               error: "AI returned invalid JSON",
@@ -117,8 +139,6 @@ ${timestampedTranscript}`,
     }
 
     if (!analysis || !Array.isArray(analysis.clips)) {
-      console.error("Unexpected AI response:", analysis);
-
       return Response.json(
         {
           error: "AI did not return valid clip suggestions",
@@ -128,29 +148,61 @@ ${timestampedTranscript}`,
       );
     }
 
-    // Keep only valid clips.
-    const validClips = analysis.clips.filter((clip) => {
-      return (
-        typeof clip.start === "number" &&
-        typeof clip.end === "number" &&
-        clip.end > clip.start &&
-        typeof clip.title === "string" &&
-        typeof clip.reason === "string"
-      );
-    });
+    const validClips = analysis.clips
+      .filter((clip) => {
+        if (
+          typeof clip.start !== "number" ||
+          typeof clip.end !== "number" ||
+          typeof clip.title !== "string" ||
+          typeof clip.reason !== "string" ||
+          typeof clip.score !== "number"
+        ) {
+          return false;
+        }
 
-    if (validClips.length === 0) {
-      return Response.json(
-        {
-          error: "AI did not return any valid clips",
-          raw: analysis,
-        },
-        { status: 500 },
-      );
+        if (clip.end <= clip.start) {
+          return false;
+        }
+
+        if (clip.end - clip.start > 45) {
+          return false;
+        }
+
+        if (videoDuration > 0 && clip.end > videoDuration) {
+          return false;
+        }
+
+        if (clip.start < 0) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const selectedClips = [];
+
+    for (const clip of validClips) {
+      const overlaps = selectedClips.some((selected) => {
+        const latestStart = Math.max(selected.start, clip.start);
+
+        const earliestEnd = Math.min(selected.end, clip.end);
+
+        return latestStart < earliestEnd;
+      });
+
+      if (!overlaps) {
+        selectedClips.push(clip);
+      }
+
+      if (selectedClips.length === 3) {
+        break;
+      }
     }
 
     return Response.json({
-      clips: validClips.slice(0, 3),
+      clips: selectedClips,
+      videoDuration,
     });
   } catch (error) {
     console.error(error);

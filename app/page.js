@@ -77,6 +77,8 @@ export default function Home() {
 
       const analysis = await analyzeResponse.json();
 
+      console.log("AI ANALYSIS:", analysis);
+
       if (!analyzeResponse.ok) {
         throw new Error(analysis.error || "Clip analysis failed");
       }
@@ -122,7 +124,10 @@ export default function Home() {
 
       setGeneratedClips((previous) => ({
         ...previous,
-        [index]: result.downloadUrl,
+        [index]: {
+          previewUrl: result.previewUrl,
+          downloadUrl: result.downloadUrl,
+        },
       }));
 
       setStatus(`Clip ${index + 1} generated!`);
@@ -215,17 +220,25 @@ export default function Home() {
                       <video
                         controls
                         className="w-full rounded-lg"
-                        src={generatedClips[index]}
+                        src={generatedClips[index].previewUrl}
                       />
-
-                      <a
-                        href={generatedClips[index]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 inline-block text-sm underline"
-                      >
-                        Open generated clip
-                      </a>
+                      <div className="mt-3 flex gap-4">
+                        <a
+                          href={generatedClips[index].previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm underline"
+                        >
+                          Open generated clip
+                        </a>
+                        <br />
+                        <a
+                          href={generatedClips[index].downloadUrl}
+                          className="text-sm underline"
+                        >
+                          Download clip
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>

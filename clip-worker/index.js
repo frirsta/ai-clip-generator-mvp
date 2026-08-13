@@ -115,13 +115,24 @@ export default {
           secretAccessKey: env.R2_SECRET_ACCESS_KEY,
         },
       });
-
-      const command = new GetObjectCommand({
+      const previewCommand = new GetObjectCommand({
         Bucket: "ai-clip-videos",
         Key: clipKey,
+        ResponseContentType: "video/mp4",
       });
 
-      const downloadUrl = await getSignedUrl(s3, command, {
+      const previewUrl = await getSignedUrl(s3, previewCommand, {
+        expiresIn: 3600,
+      });
+
+      const downloadCommand = new GetObjectCommand({
+        Bucket: "ai-clip-videos",
+        Key: clipKey,
+        ResponseContentType: "video/mp4",
+        ResponseContentDisposition: `attachment; filename="ai-clip-${crypto.randomUUID()}.mp4"`,
+      });
+
+      const downloadUrl = await getSignedUrl(s3, downloadCommand, {
         expiresIn: 3600,
       });
 
@@ -131,6 +142,7 @@ export default {
         {
           success: true,
           key: clipKey,
+          previewUrl,
           downloadUrl,
         },
         {
