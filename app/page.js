@@ -7,6 +7,9 @@ export default function Home() {
   const [status, setStatus] = useState("");
   const [transcript, setTranscript] = useState("");
   const [clips, setClips] = useState([]);
+  const [videoKey, setVideoKey] = useState("");
+  const [generatingClip, setGeneratingClip] = useState(null);
+  const [generatedClips, setGeneratedClips] = useState({});
 
   async function uploadVideo() {
     if (!file) return;
@@ -15,23 +18,24 @@ export default function Home() {
       setStatus("Preparing upload...");
       setTranscript("");
       setClips([]);
+      setGeneratedClips({});
 
-      // 1. Get R2 upload URL
       const uploadUrlResponse = await fetch("/api/upload-url");
 
       if (!uploadUrlResponse.ok) {
         throw new Error("Could not create upload URL");
       }
 
-      const { uploadUrl } = await uploadUrlResponse.json();
+      const { uploadUrl, key } = await uploadUrlResponse.json();
 
-      // 2. Upload video to R2
+      setVideoKey(key);
+
       setStatus("Uploading video...");
 
       const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": "video/mp4",
+          "Content-Type": file.type,
         },
         body: file,
       });
@@ -40,7 +44,6 @@ export default function Home() {
         throw new Error("Upload failed");
       }
 
-      // 3. Transcribe video
       setStatus("Transcribing video...");
 
       const formData = new FormData();
@@ -59,7 +62,6 @@ export default function Home() {
 
       setTranscript(transcription.text || "");
 
-      // 4. Analyze transcript with AI
       setStatus("Finding the best clips...");
 
       const analyzeResponse = await fetch("/api/analyze-transcript", {
@@ -75,8 +77,6 @@ export default function Home() {
 
       const analysis = await analyzeResponse.json();
 
-      console.log("AI ANALYSIS:", analysis);
-
       if (!analyzeResponse.ok) {
         throw new Error(analysis.error || "Clip analysis failed");
       }
@@ -86,6 +86,48 @@ export default function Home() {
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Something went wrong.");
+    }
+  }
+
+  async function generateClip(clip, index) {
+    if (!videoKey) {
+      setStatus("Video key is missing.");
+      return;
+    }
+
+    try {
+      setGeneratingClip(index);
+      setStatus(`Generating clip ${index + 1}...`);
+
+      const response = await fetch("/api/generate-clip", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          key: videoKey,
+          start: Number(clip.start),
+          end: Number(clip.end),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Could not generate clip");
+      }
+
+      setGeneratedClips((previous) => ({
+        ...previous,
+        [index]: result.downloadUrl,
+      }));
+
+      setStatus(`Clip ${index + 1} generated!`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Clip generation failed.");
+    } finally {
+      setGeneratingClip(null);
     }
   }
 
@@ -112,7 +154,7 @@ export default function Home() {
         <div className="mt-8 rounded-xl border p-6">
           <input
             type="file"
-            accept="video/mp4"
+            accept="video/mp4,video/quicktime"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
             className="w-full"
           />
@@ -156,11 +198,33 @@ export default function Home() {
                   <p className="mt-2 text-gray-600">{clip.reason}</p>
 
                   <button
-                    disabled
-                    className="mt-4 rounded-lg bg-black px-4 py-2 text-sm text-white opacity-50"
+                    onClick={() => generateClip(clip, index)}
+                    disabled={generatingClip !== null}
+                    className="mt-4 rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
                   >
-                    Generate Clip
+                    {generatingClip === index
+                      ? "Generating..."
+                      : "Generate Clip"}
                   </button>
+
+                  {generatedClips[index] && (
+                    <div className="mt-5">
+                      <video
+                        controls
+                        className="w-full rounded-lg"
+                        src={generatedClips[index]}
+                      />
+
+                      <a
+                        href={generatedClips[index]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-block text-sm underline"
+                      >
+                        Open generated clip
+                      </a>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

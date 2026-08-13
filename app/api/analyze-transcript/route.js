@@ -42,17 +42,19 @@ Look for:
 IMPORTANT:
 Use ONLY timestamps that appear in the provided transcript.
 Do not invent timestamps.
-The start and end times must fall within an actual timestamped segment.
 
 Return exactly 3 clip suggestions.
 
-Return JSON in this format:
+Return ONLY valid JSON.
+Do not include any explanation, introduction, markdown, or text outside the JSON.
+
+The JSON must have this exact structure:
 
 {
   "clips": [
     {
       "start": 0,
-      "end": 30,
+      "end": 10,
       "title": "Short engaging title",
       "reason": "Why this moment would make a good short-form clip"
     }
@@ -72,7 +74,84 @@ ${timestampedTranscript}`,
       temperature: 0.3,
     });
 
-    return Response.json(response.response);
+    let analysis = response.response;
+
+    // If the AI returned a JSON string, parse it.
+    if (typeof analysis === "string") {
+      try {
+        analysis = JSON.parse(analysis);
+      } catch {
+        // The model sometimes adds text before the JSON.
+        // Try extracting the JSON object.
+        const firstBrace = analysis.indexOf("{");
+        const lastBrace = analysis.lastIndexOf("}");
+
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          const jsonText = analysis.slice(firstBrace, lastBrace + 1);
+
+          try {
+            analysis = JSON.parse(jsonText);
+          } catch (error) {
+            console.error("Could not parse extracted AI response:", analysis);
+
+            return Response.json(
+              {
+                error: "AI returned invalid JSON",
+                raw: analysis,
+              },
+              { status: 500 },
+            );
+          }
+        } else {
+          console.error("Could not find JSON in AI response:", analysis);
+
+          return Response.json(
+            {
+              error: "AI returned invalid JSON",
+              raw: analysis,
+            },
+            { status: 500 },
+          );
+        }
+      }
+    }
+
+    if (!analysis || !Array.isArray(analysis.clips)) {
+      console.error("Unexpected AI response:", analysis);
+
+      return Response.json(
+        {
+          error: "AI did not return valid clip suggestions",
+          raw: analysis,
+        },
+        { status: 500 },
+      );
+    }
+
+    // Keep only valid clips.
+    const validClips = analysis.clips.filter((clip) => {
+      return (
+        typeof clip.start === "number" &&
+        typeof clip.end === "number" &&
+        clip.end > clip.start &&
+        typeof clip.title === "string" &&
+        typeof clip.reason === "string"
+      );
+    });
+
+    if (validClips.length === 0) {
+      return Response.json(
+        {
+          error: "AI did not return any valid clips",
+          raw: analysis,
+        },
+        { status: 500 },
+      );
+    }
+
+    return Response.json({
+      clips: validClips.slice(0, 3),
+    });
   } catch (error) {
     console.error(error);
 

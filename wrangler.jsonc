@@ -23,14 +23,16 @@
     },
     {
       "binding": "VIDEO_BUCKET",
-      "bucket_name": "ai-clip-videos"
+      "bucket_name": "ai-clip-videos",
+      "remote": true,
     }
   ],
   "ai": {
   "binding": "AI"
 },
 "media": {
-  "binding": "MEDIA"
+  "binding": "MEDIA",
+  "remote": true,
 },
   "images": {
     "binding": "IMAGES"
