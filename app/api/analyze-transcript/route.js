@@ -1,4 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { corsHeaders, handleCors } from "@/lib/cors";
+
 function calculateClipBoundaries(visualEventTime, segments, duration) {
   if (!Array.isArray(segments) || !segments.length) {
     const start = Math.max(0, visualEventTime - 4);
@@ -94,6 +96,9 @@ function calculateClipBoundaries(visualEventTime, segments, duration) {
     end: Number(end.toFixed(2)),
   };
 }
+export async function OPTIONS(request) {
+  return handleCors(request);
+}
 
 export async function POST(request) {
   try {
@@ -105,7 +110,10 @@ export async function POST(request) {
     if (!transcript) {
       return Response.json(
         { error: "Transcript is required" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: corsHeaders(request),
+        },
       );
     }
 
@@ -114,7 +122,10 @@ export async function POST(request) {
     if (!Number.isFinite(duration) || duration <= 0) {
       return Response.json(
         { error: "Valid video duration is required" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: corsHeaders(request),
+        },
       );
     }
 
@@ -375,7 +386,7 @@ Do not simply use the visual event timestamp as the clip start.`,
                 error: "AI returned invalid JSON",
                 raw: analysis,
               },
-              { status: 500 },
+              { status: 500, headers: corsHeaders(request) },
             );
           }
         } else {
@@ -384,7 +395,7 @@ Do not simply use the visual event timestamp as the clip start.`,
               error: "AI returned invalid JSON",
               raw: analysis,
             },
-            { status: 500 },
+            { status: 500, headers: corsHeaders(request) },
           );
         }
       }
@@ -396,7 +407,7 @@ Do not simply use the visual event timestamp as the clip start.`,
           error: "AI did not return valid clip suggestions",
           raw: analysis,
         },
-        { status: 500 },
+        { status: 500, headers: corsHeaders(request) },
       );
     }
 
@@ -479,10 +490,15 @@ Do not simply use the visual event timestamp as the clip start.`,
 
     console.log("SELECTED CLIPS:", selectedClips);
 
-    return Response.json({
-      clips: selectedClips,
-      videoDuration: duration,
-    });
+    return Response.json(
+      {
+        clips: selectedClips,
+        videoDuration: duration,
+      },
+      {
+        headers: corsHeaders(request),
+      },
+    );
   } catch (error) {
     console.error("ANALYZE TRANSCRIPT ERROR:", error);
 
@@ -490,7 +506,7 @@ Do not simply use the visual event timestamp as the clip start.`,
       {
         error: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 },
+      { status: 500, headers: corsHeaders(request) },
     );
   }
 }

@@ -1,6 +1,11 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createWorkersAI } from "workers-ai-provider";
 import { experimental_transcribe } from "ai";
+import { corsHeaders, handleCors } from "@/lib/cors";
+
+export async function OPTIONS(request) {
+  return handleCors(request);
+}
 
 export async function POST(request) {
   const requestStart = performance.now();
@@ -15,14 +20,15 @@ export async function POST(request) {
 
     const formDataTime = performance.now() - formDataStart;
 
-    console.log(
-      `TRANSCRIBE: formData parsed in ${formDataTime.toFixed(0)}ms`,
-    );
+    console.log(`TRANSCRIBE: formData parsed in ${formDataTime.toFixed(0)}ms`);
 
     if (!audio || typeof audio.arrayBuffer !== "function") {
       return Response.json(
         { error: "No audio file provided" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: corsHeaders(request),
+        },
       );
     }
 
@@ -32,14 +38,15 @@ export async function POST(request) {
 
     const audioTime = performance.now() - audioStart;
 
-    console.log(
-      `TRANSCRIBE: audio read in ${audioTime.toFixed(0)}ms`,
-    );
+    console.log(`TRANSCRIBE: audio read in ${audioTime.toFixed(0)}ms`);
 
     if (audioBuffer.byteLength === 0) {
       return Response.json(
         { error: "Audio file is empty" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: corsHeaders(request),
+        },
       );
     }
 
@@ -56,9 +63,7 @@ export async function POST(request) {
     });
 
     const transcript = await experimental_transcribe({
-      model: workersai.transcription(
-        "@cf/openai/whisper-large-v3-turbo",
-      ),
+      model: workersai.transcription("@cf/openai/whisper-large-v3-turbo"),
       audio: audioBuffer,
       mediaType: audio.type || "video/mp4",
     });
@@ -71,31 +76,32 @@ export async function POST(request) {
 
     const totalTime = performance.now() - requestStart;
 
-    console.log(
-      `TRANSCRIBE: TOTAL ${(totalTime / 1000).toFixed(2)}s`,
-    );
+    console.log(`TRANSCRIBE: TOTAL ${(totalTime / 1000).toFixed(2)}s`);
 
-    return Response.json({
-      text: transcript.text,
-      segments: transcript.segments,
-    });
+    return Response.json(
+      {
+        text: transcript.text,
+        segments: transcript.segments,
+      },
+      {
+        headers: corsHeaders(request),
+      },
+    );
   } catch (error) {
     const totalTime = performance.now() - requestStart;
 
-    console.error(
-      `TRANSCRIBE: failed after ${(totalTime / 1000).toFixed(2)}s`,
-    );
+    console.error(`TRANSCRIBE: failed after ${(totalTime / 1000).toFixed(2)}s`);
 
     console.error(error);
 
     return Response.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 },
+      {
+        status: 500,
+        headers: corsHeaders(request),
+      },
     );
   }
 }

@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { corsHeaders, handleCors } from "@/lib/cors";
 
 const s3 = new S3Client({
   region: "auto",
@@ -10,7 +11,11 @@ const s3 = new S3Client({
   },
 });
 
-export async function GET() {
+export async function OPTIONS(request) {
+  return handleCors(request);
+}
+
+export async function GET(request) {
   const key = `videos/${crypto.randomUUID()}.mp4`;
 
   const command = new PutObjectCommand({
@@ -23,8 +28,13 @@ export async function GET() {
     expiresIn: 600,
   });
 
-  return Response.json({
-    uploadUrl,
-    key,
-  });
+  return Response.json(
+    {
+      uploadUrl,
+      key,
+    },
+    {
+      headers: corsHeaders(request),
+    },
+  );
 }
